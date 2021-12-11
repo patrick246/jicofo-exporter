@@ -6,6 +6,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -35,10 +36,8 @@ func (s *StatsClient) GetStats() (map[string]float64, map[string]map[float64]uin
 		return nil, nil, err
 	}
 
-	decoder := json.NewDecoder(resp.Body)
-
 	var statsResponse map[string]interface{}
-	err = decoder.Decode(&statsResponse)
+	err = json.NewDecoder(resp.Body).Decode(&statsResponse)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -63,22 +62,24 @@ func convertStats(stats map[string]interface{}, prefix string) (map[string]float
 	histograms := make(map[string]map[float64]uint64)
 
 	for key, value := range stats {
+		metricName := prefix + strings.ReplaceAll(key, "-", "_")
+
 		switch v := value.(type) {
 		case float64:
-			singleLevelStats[prefix+key] = v
+			singleLevelStats[metricName] = v
 		case bool:
 			if v {
-				singleLevelStats[prefix+key] = 1
+				singleLevelStats[metricName] = 1
 			} else {
-				singleLevelStats[prefix+key] = 0
+				singleLevelStats[metricName] = 0
 			}
 		case map[string]interface{}:
-			nestedSingle, nestedHistogram := convertStats(v, prefix+key+"_")
+			nestedSingle, nestedHistogram := convertStats(v, metricName+"_")
 			singleLevelStats = mergeMapsFloat(singleLevelStats, nestedSingle)
 			histograms = mergeMapsHistogram(histograms, nestedHistogram)
 
 		case []interface{}:
-			histograms[prefix+key] = convertHistogram(v)
+			histograms[metricName] = convertHistogram(v)
 		default:
 			fmt.Printf("skipping %s", key)
 		}
